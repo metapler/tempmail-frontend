@@ -22,7 +22,7 @@ Dokumen ini berisi panduan lengkap untuk **admin** dalam mengelola stock produk 
 Tambahkan `ADMIN_TELEGRAM_ID` di file `.env`:
 
 ```env
-ADMIN_TELEGRAM_ID=5727876641
+ADMIN_TELEGRAM_ID=
 ```
 
 > 💡 **Tips:** Dapatkan Telegram ID Anda dari bot [@userinfobot](https://t.me/userinfobot) atau dengan mengirim pesan ke [@raw_data_bot](https://t.me/raw_data_bot).
