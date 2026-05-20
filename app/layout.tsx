@@ -5,8 +5,9 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "TempMail | Elegant Disposable Email",
-  description: "Minimalist, fast, and secure temporary email service.",
+  title: "TempMail — Disposable email, streamed live",
+  description:
+    "Generate a throwaway email address and watch incoming messages arrive in real time.",
 };
 
 export default function RootLayout({
@@ -16,10 +17,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={inter.variable}>
-      <body className="min-h-screen font-sans bg-[#fafafa] text-[#09090b] antialiased selection:bg-black selection:text-white">
-        <div className="fixed inset-0 z-[-1] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gray-100 via-gray-50 to-[#fafafa]"></div>
-        {children}
-      </body>
+      <body className="app-body">{children}</body>
     </html>
   );
 }

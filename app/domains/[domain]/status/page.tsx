@@ -1,50 +1,161 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { ArrowLeft, CheckCircle2, Circle, RefreshCw } from "lucide-react";
+import {
+  ApiError,
+  getCustomDomainStatus,
+  verifyCustomDomain,
+  type CustomDomainStatus,
+} from "../../../lib/api";
 
-export default function DomainStatusPage() {
+const POLL_INTERVAL_MS = 15_000;
+
+export default function CustomDomainStatusPage() {
   const { domain } = useParams<{ domain: string }>();
   const decoded = decodeURIComponent(domain);
-  const [status, setStatus] = useState<any | null>(null);
 
-  async function fetchStatus() {
-    const res = await fetch(`/api/v1/domains/custom/${encodeURIComponent(decoded)}/status`);
-    if (res.ok) {
-      setStatus(await res.json());
+  const [status, setStatus] = useState<CustomDomainStatus | null>(null);
+  const [checks, setChecks] = useState<{ txt: boolean; mx: boolean } | null>(
+    null
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  async function load() {
+    try {
+      const data = await getCustomDomainStatus(decoded);
+      setStatus(data);
+      setError(null);
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Failed to load status";
+      setError(message);
     }
   }
 
   async function verify() {
-    const res = await fetch(`/api/v1/domains/custom/${encodeURIComponent(decoded)}/verify`, {
-      method: "POST",
-    });
-    if (res.ok) {
-      setStatus(await res.json());
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const data = await verifyCustomDomain(decoded);
+      if (data.status === "active") {
+        setChecks({ txt: true, mx: true });
+      } else {
+        setChecks(data.checks);
+      }
+      await load();
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Verification failed";
+      setError(message);
+    } finally {
+      setBusy(false);
     }
   }
 
   useEffect(() => {
-    fetchStatus();
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [decoded]);
 
-  if (!status) return <div className="p-6 text-sm">Loading...</div>;
+  // Poll while pending so the user sees status update without manual refresh.
+  useEffect(() => {
+    if (status?.status === "active") {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return;
+    }
+    if (pollRef.current) return;
+    pollRef.current = setInterval(() => {
+      void load();
+    }, POLL_INTERVAL_MS);
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status?.status]);
 
   return (
-    <main className="mx-auto max-w-2xl p-6">
-      <h1 className="mb-4 text-2xl font-bold">Domain: {decoded}</h1>
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="mb-2 text-sm">Status: <span className="font-semibold">{status.status}</span></div>
-        {status.lastCheckedAt && (
-          <div className="text-xs text-gray-500">Last checked: {new Date(status.lastCheckedAt).toLocaleString()}</div>
-        )}
-        <button
-          onClick={verify}
-          className="mt-3 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
-        >
-          Verify Now
-        </button>
-      </div>
-    </main>
+    <div className="page-shell">
+      <main className="page-main narrow">
+        <Link href="/domains/add" className="back-link">
+          <ArrowLeft size={14} />
+          Back to add domain
+        </Link>
+
+        <header className="hero hero-tight">
+          <h1 className="hero-title">{decoded}</h1>
+          <p className="hero-sub">
+            DNS verification status. We re-check every 15 seconds while
+            pending.
+          </p>
+        </header>
+
+        <section className="surface stack">
+          {status ? (
+            <div className="status-row">
+              <span className={`pill status status-${status.status}`}>
+                <span className="dot" aria-hidden />
+                {status.status === "active" ? "Active" : "Pending verification"}
+              </span>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={verify}
+                disabled={busy}
+              >
+                <RefreshCw size={14} className={busy ? "spin" : ""} />
+                {busy ? "Verifying…" : "Verify now"}
+              </button>
+            </div>
+          ) : (
+            <p className="muted">Loading status…</p>
+          )}
+
+          {checks ? (
+            <ul className="check-list">
+              <li className={checks.txt ? "ok" : "todo"}>
+                {checks.txt ? <CheckCircle2 size={16} /> : <Circle size={16} />}
+                TXT record propagated
+              </li>
+              <li className={checks.mx ? "ok" : "todo"}>
+                {checks.mx ? <CheckCircle2 size={16} /> : <Circle size={16} />}
+                MX record propagated
+              </li>
+            </ul>
+          ) : null}
+
+          {status?.lastCheckedAt ? (
+            <p className="muted small">
+              Last checked: {new Date(status.lastCheckedAt).toLocaleString()}
+            </p>
+          ) : null}
+
+          {error ? <p className="alert subtle">{error}</p> : null}
+        </section>
+
+        {status?.status === "active" ? (
+          <section className="surface stack success-card">
+            <h2 className="section-heading">Domain is live</h2>
+            <p className="muted">
+              You can now generate inboxes on <code>{decoded}</code>.
+            </p>
+            <Link href="/" className="btn-primary self-start">
+              Open inbox
+            </Link>
+          </section>
+        ) : null}
+      </main>
+    </div>
   );
 }
